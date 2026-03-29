@@ -11,8 +11,18 @@ Fetches current AI model pricing (input/output token costs and context window si
 
 ## Install
 
+### First time (clone from GitHub)
+
 ```bash
+git clone https://github.com/kghaynes/scrounge-tokens.git
+cd scrounge-tokens
 pip install -e .
+```
+
+### Get updates later
+
+```bash
+git pull origin main
 ```
 
 ## Usage
