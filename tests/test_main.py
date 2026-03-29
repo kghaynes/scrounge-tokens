@@ -6,6 +6,9 @@ from scrounge_tokens.main import (
     _base_name,
     _format_context,
     _format_cost,
+    _is_deprecated,
+    _is_ft,
+    _is_specialized,
     _parse_token_count,
     _price_delta,
     _strip_prefix,
@@ -172,12 +175,20 @@ SAMPLE_DATA = {
         "input_cost_per_token": 0.000001,
         "output_cost_per_token": 0.000002,
     },
-    # Should be excluded: no pricing
+    # Should be excluded: no pricing (None)
     "free-model": {
         "litellm_provider": "anthropic",
         "mode": "chat",
         "input_cost_per_token": None,
         "output_cost_per_token": None,
+    },
+    # Should be excluded: zero pricing (experimental)
+    "zero-priced-model": {
+        "litellm_provider": "gemini",
+        "mode": "chat",
+        "input_cost_per_token": 0,
+        "output_cost_per_token": 0,
+        "max_input_tokens": 1_000_000,
     },
 }
 
@@ -496,3 +507,64 @@ def test_deduplicate_all_versions_passthrough():
     # Without deduplication the full set is returned
     models = parse_models(VERSIONED_DATA)
     assert len(models) == 6
+
+
+# --- _is_ft ---
+
+
+def test_is_ft_true():
+    assert _is_ft({"model": "ft:gpt-4o-2024-08-06"}) is True
+
+
+def test_is_ft_false():
+    assert _is_ft({"model": "gpt-4o"}) is False
+
+
+# --- _is_specialized ---
+
+
+def test_is_specialized_audio():
+    assert _is_specialized("gpt-4o-audio-preview") is True
+
+
+def test_is_specialized_realtime():
+    assert _is_specialized("gpt-4o-realtime-preview") is True
+
+
+def test_is_specialized_search():
+    assert _is_specialized("gpt-4o-search-preview") is True
+
+
+def test_is_specialized_regular_model():
+    assert _is_specialized("gpt-4o") is False
+    assert _is_specialized("claude-sonnet-4-5") is False
+
+
+# --- _is_deprecated ---
+
+
+def test_is_deprecated_gpt35():
+    assert _is_deprecated("gpt-3.5-turbo") is True
+    assert _is_deprecated("gpt-3.5-turbo-0125") is True
+
+
+def test_is_deprecated_old_gpt4():
+    assert _is_deprecated("gpt-4") is True
+    assert _is_deprecated("gpt-4-0314") is True
+    assert _is_deprecated("gpt-4-turbo") is True
+    assert _is_deprecated("gpt-4-turbo-preview") is True
+
+
+def test_is_deprecated_current_not_flagged():
+    assert _is_deprecated("gpt-4o") is False
+    assert _is_deprecated("gpt-4.1") is False
+    assert _is_deprecated("claude-sonnet-4-5") is False
+    assert _is_deprecated("gemini-2.5-pro") is False
+
+
+# --- parse_models zero-pricing ---
+
+
+def test_parse_models_excludes_zero_priced():
+    models = parse_models(SAMPLE_DATA)
+    assert "zero-priced-model" not in [m["model"] for m in models]

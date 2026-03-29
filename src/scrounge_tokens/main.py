@@ -41,6 +41,22 @@ CHAT_MODES = {"chat", "completion", None}
 
 CACHE_PATH = Path.home() / ".cache" / "scrounge-tokens" / "prices.json"
 
+# Specialized model categories (audio, realtime, search) — hidden by default
+_SPECIALIZED_TERMS = ("audio", "realtime", "search")
+
+# Deprecated model families — hidden by default
+_DEPRECATED_PREFIXES = ("gpt-3.5",)
+_DEPRECATED_NAMES = frozenset({
+    "gpt-4",
+    "gpt-4-0314",
+    "gpt-4-0613",
+    "gpt-4-turbo",
+    "gpt-4-turbo-preview",
+    "gpt-4-1106-preview",
+    "gpt-4-0125-preview",
+    "gpt-3.5-turbo-16k",
+})
+
 
 def fetch_pricing() -> dict:
     response = httpx.get(PRICING_URL, timeout=30)
@@ -65,8 +81,8 @@ def parse_models(data: dict) -> list[dict]:
         input_cost = info.get("input_cost_per_token")
         output_cost = info.get("output_cost_per_token")
 
-        # Skip models with no pricing info at all
-        if input_cost is None and output_cost is None:
+        # Skip models with no pricing (None or explicit 0)
+        if not (input_cost or output_cost):
             continue
 
         context_tokens = info.get("max_input_tokens") or info.get("max_tokens")
@@ -250,6 +266,24 @@ def print_csv_output(models: list[dict]) -> None:
         ])
 
 
+def _is_ft(model: dict) -> bool:
+    """Fine-tuned model (prefixed with ft:)."""
+    return model["model"].startswith("ft:")
+
+
+def _is_specialized(model_name: str) -> bool:
+    """Audio, realtime, or search-specific model."""
+    lower = model_name.lower()
+    return any(t in lower for t in _SPECIALIZED_TERMS)
+
+
+def _is_deprecated(model_name: str) -> bool:
+    """Old model generation superseded by cheaper/better alternatives."""
+    if model_name in _DEPRECATED_NAMES:
+        return True
+    return any(model_name.startswith(p) for p in _DEPRECATED_PREFIXES)
+
+
 def _base_name(model_name: str) -> str:
     """Strip a date-based version suffix from a model name."""
     return _DATE_SUFFIX.sub("", model_name)
@@ -361,6 +395,21 @@ examples:
         action="store_true",
         help="Show all dated model versions (default: collapse to one per family)",
     )
+    parser.add_argument(
+        "--show-ft",
+        action="store_true",
+        help="Include fine-tuned models (ft:*) — hidden by default",
+    )
+    parser.add_argument(
+        "--show-specialized",
+        action="store_true",
+        help="Include audio, realtime, and search models — hidden by default",
+    )
+    parser.add_argument(
+        "--show-deprecated",
+        action="store_true",
+        help="Include deprecated model generations (GPT-3.5, old GPT-4) — hidden by default",
+    )
     args = parser.parse_args()
 
     cache = load_cache()
@@ -393,6 +442,14 @@ examples:
     # Deduplication (collapse dated version variants by default)
     if not args.all_versions:
         models = deduplicate_models(models)
+
+    # Default exclusions (opt in with --show-* flags)
+    if not args.show_ft:
+        models = [m for m in models if not _is_ft(m)]
+    if not args.show_specialized:
+        models = [m for m in models if not _is_specialized(m["model"])]
+    if not args.show_deprecated:
+        models = [m for m in models if not _is_deprecated(m["model"])]
 
     # Filters and sort
     min_context = _parse_token_count(args.min_context) if args.min_context else None
