@@ -57,12 +57,21 @@ All logic lives in `src/scrounge_tokens/main.py`:
 | Function | Purpose |
 |---|---|
 | `fetch_pricing()` | Fetches the litellm pricing JSON via HTTP |
-| `parse_models(data)` | Filters to target providers, extracts cost/context fields |
-| `print_table(models)` | Renders the ASCII table to stdout |
+| `parse_models(data)` | Filters to target providers, extracts cost/context/capability fields |
+| `filter_models(models, ...)` | Filters by provider, min context, max cost |
+| `sort_models(models, sort_by)` | Sorts by provider, cost, context, or model name |
+| `add_estimated_cost(models, ...)` | Adds `est_cost` field based on token usage |
+| `apply_price_changes(current, cached)` | Annotates models with price deltas vs cached run |
+| `load_cache()` / `save_cache(models)` | Reads/writes `~/.cache/scrounge-tokens/prices.json` |
+| `print_table(models, ...)` | Renders the ASCII table to stdout |
+| `print_json_output(models)` | Renders JSON to stdout |
+| `print_csv_output(models)` | Renders CSV to stdout |
 | `_strip_prefix(key)` | Removes litellm provider prefixes (e.g. `gemini/`) from model names |
 | `_format_context(tokens)` | Formats token counts as `128K`, `1M`, etc. |
 | `_format_cost(cost)` | Formats per-1M-token cost as a dollar amount |
-| `main()` | Entry point — fetch, parse, print |
+| `_price_delta(current, previous)` | Returns formatted delta string, e.g. `+$1.00` |
+| `_parse_token_count(value)` | Parses `128k`, `1.5m`, `200000` to int |
+| `main()` | Entry point — parses CLI args, fetch, parse, filter, sort, print |
 
 ### Provider Mapping
 
@@ -76,6 +85,26 @@ litellm uses these provider keys, mapped to display names:
 | `nvidia_nim` | NVIDIA |
 
 Models with `mode: embedding`, `mode: image_generation`, etc. are excluded — only chat/completion models are shown.
+
+### Cache
+
+Pricing data is cached to `~/.cache/scrounge-tokens/prices.json` after each fresh fetch. On subsequent runs, prices are compared against the cache and changes are shown in the table. Use `--cached` to skip fetching and use saved data.
+
+## CLI Reference
+
+```
+scrounge-tokens [options]
+
+--provider NAME         Filter by provider (anthropic, openai, google, nvidia)
+--min-context SIZE      Minimum context window, e.g. 128k, 1m
+--max-cost DOLLARS      Maximum input cost per 1M tokens
+--sort-by FIELD         provider | input-cost | output-cost | context | model
+--input-tokens COUNT    } Estimate cost per run (e.g. 1m, 500k)
+--output-tokens COUNT   }
+--json                  Output as JSON
+--csv                   Output as CSV
+--cached                Use cached data instead of fetching
+```
 
 ## Development Conventions
 
