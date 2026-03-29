@@ -1,0 +1,11 @@
+README.md
+pyproject.toml
+src/scrounge_tokens/__init__.py
+src/scrounge_tokens/main.py
+src/scrounge_tokens.egg-info/PKG-INFO
+src/scrounge_tokens.egg-info/SOURCES.txt
+src/scrounge_tokens.egg-info/dependency_links.txt
+src/scrounge_tokens.egg-info/entry_points.txt
+src/scrounge_tokens.egg-info/requires.txt
+src/scrounge_tokens.egg-info/top_level.txt
+tests/test_main.py
