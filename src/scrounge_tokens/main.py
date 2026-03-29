@@ -41,11 +41,11 @@ CHAT_MODES = {"chat", "completion", None}
 
 CACHE_PATH = Path.home() / ".cache" / "scrounge-tokens" / "prices.json"
 
-# Specialized model categories (audio, realtime, search) — hidden by default
-_SPECIALIZED_TERMS = ("audio", "realtime", "search")
+# Specialized model categories — hidden by default
+_SPECIALIZED_TERMS = ("audio", "realtime", "search", "robotics", "computer-use", "tts", "customtools")
 
 # Deprecated model families — hidden by default
-_DEPRECATED_PREFIXES = ("gpt-3.5",)
+_DEPRECATED_PREFIXES = ("gpt-3.5", "gemini-exp")
 _DEPRECATED_NAMES = frozenset({
     "gpt-4",
     "gpt-4-0314",
@@ -55,6 +55,19 @@ _DEPRECATED_NAMES = frozenset({
     "gpt-4-1106-preview",
     "gpt-4-0125-preview",
     "gpt-3.5-turbo-16k",
+})
+
+# Alias/pointer models — hidden by default
+# -latest: API aliases that always point to the current version
+# -chat:   alternate ChatGPT-style endpoints (gpt-5-chat, gpt-5-chat-latest)
+# base names: Anthropic publishes the same model under two naming conventions
+#   claude-4-sonnet-* == claude-sonnet-4-*
+#   claude-4-opus-*   == claude-opus-4-*
+_ALIAS_SUFFIXES = ("-latest",)
+_ALIAS_SUBSTRINGS = ("-chat",)
+_ALIAS_BASE_NAMES = frozenset({
+    "claude-4-sonnet",
+    "claude-4-opus",
 })
 
 
@@ -284,6 +297,15 @@ def _is_deprecated(model_name: str) -> bool:
     return any(model_name.startswith(p) for p in _DEPRECATED_PREFIXES)
 
 
+def _is_alias(model_name: str) -> bool:
+    """Pointer aliases, alternate endpoints, or cross-named duplicates."""
+    if any(model_name.endswith(s) for s in _ALIAS_SUFFIXES):
+        return True
+    if any(s in model_name for s in _ALIAS_SUBSTRINGS):
+        return True
+    return _base_name(model_name) in _ALIAS_BASE_NAMES
+
+
 def _base_name(model_name: str) -> str:
     """Strip a date-based version suffix from a model name."""
     return _DATE_SUFFIX.sub("", model_name)
@@ -410,6 +432,11 @@ examples:
         action="store_true",
         help="Include deprecated model generations (GPT-3.5, old GPT-4) — hidden by default",
     )
+    parser.add_argument(
+        "--show-aliases",
+        action="store_true",
+        help="Include -latest pointers, -chat endpoints, and cross-named duplicates — hidden by default",
+    )
     args = parser.parse_args()
 
     cache = load_cache()
@@ -450,6 +477,8 @@ examples:
         models = [m for m in models if not _is_specialized(m["model"])]
     if not args.show_deprecated:
         models = [m for m in models if not _is_deprecated(m["model"])]
+    if not args.show_aliases:
+        models = [m for m in models if not _is_alias(m["model"])]
 
     # Filters and sort
     min_context = _parse_token_count(args.min_context) if args.min_context else None

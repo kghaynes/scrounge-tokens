@@ -6,6 +6,7 @@ from scrounge_tokens.main import (
     _base_name,
     _format_context,
     _format_cost,
+    _is_alias,
     _is_deprecated,
     _is_ft,
     _is_specialized,
@@ -535,9 +536,52 @@ def test_is_specialized_search():
     assert _is_specialized("gpt-4o-search-preview") is True
 
 
+def test_is_specialized_robotics():
+    assert _is_specialized("gemini-robotics-er-1.5-preview") is True
+
+
+def test_is_specialized_tts():
+    assert _is_specialized("gemini-2.5-pro-preview-tts") is True
+
+
+def test_is_specialized_computer_use():
+    assert _is_specialized("gemini-2.5-computer-use-preview-10-2025") is True
+
+
 def test_is_specialized_regular_model():
     assert _is_specialized("gpt-4o") is False
     assert _is_specialized("claude-sonnet-4-5") is False
+
+
+# --- _is_alias ---
+
+
+def test_is_alias_latest_suffix():
+    assert _is_alias("gemini-flash-latest") is True
+    assert _is_alias("gpt-5-chat-latest") is True
+
+
+def test_is_alias_chat_endpoint():
+    assert _is_alias("gpt-5-chat") is True
+
+
+def test_is_alias_anthropic_cross_name():
+    assert _is_alias("claude-4-sonnet-20250514") is True   # base = claude-4-sonnet
+    assert _is_alias("claude-4-opus-20250514") is True     # base = claude-4-opus
+
+
+def test_is_alias_real_model_not_flagged():
+    assert _is_alias("gpt-4o") is False
+    assert _is_alias("claude-sonnet-4-5") is False
+    assert _is_alias("gemini-2.5-flash") is False
+
+
+# --- _is_deprecated extended ---
+
+
+def test_is_deprecated_gemini_exp():
+    assert _is_deprecated("gemini-exp-1206") is True
+    assert _is_deprecated("gemini-exp-1114") is True
 
 
 # --- _is_deprecated ---
