@@ -4,6 +4,7 @@
 import argparse
 import csv
 import json
+import re
 import sys
 from datetime import datetime, timezone
 from pathlib import Path
@@ -14,15 +15,21 @@ import httpx
 PRICING_URL = "https://raw.githubusercontent.com/BerriAI/litellm/main/model_prices_and_context_window.json"
 
 # litellm provider keys -> display names
+# Note: Google uses "gemini" as its provider key (not "google").
+# Note: "nvidia_nim" exists in litellm but currently only contains rerank models
+#       with no pricing — NVIDIA NIM chat model pricing is not yet in this source.
 PROVIDERS = {
     "anthropic": "Anthropic",
     "openai": "OpenAI",
-    "google": "Google",
+    "gemini": "Google",
     "nvidia_nim": "NVIDIA",
 }
 
 # Prefixes to strip from model keys for cleaner display
 STRIP_PREFIXES = ("gemini/", "nvidia_nim/")
+
+# Matches date-based version suffixes: -20241022 or -2024-08-06
+_DATE_SUFFIX = re.compile(r"-(\d{8}|\d{4}-\d{2}-\d{2})$")
 
 # Only include models with these modes (or no mode specified)
 CHAT_MODES = {"chat", "completion", None}
@@ -102,6 +109,29 @@ def sort_models(models: list[dict], sort_by: str = "provider") -> list[dict]:
         "provider": lambda m: (m["provider"], m["model"]),
     }
     return sorted(models, key=sort_keys.get(sort_by, sort_keys["provider"]))
+
+
+def deduplicate_models(models: list[dict]) -> list[dict]:
+    """Collapse dated version variants, keeping one representative per model family.
+
+    Prefers the canonical unversioned name (e.g. 'gpt-4o') over dated variants
+    (e.g. 'gpt-4o-2024-11-20'). When no canonical exists, keeps the latest date.
+    Matches suffixes like -20241022 or -2024-08-06.
+    """
+    seen: dict[tuple, dict] = {}
+    for model in models:
+        key = (model["provider"], _base_name(model["model"]))
+        if key not in seen:
+            seen[key] = model
+        else:
+            existing = seen[key]
+            current_is_canonical = model["model"] == _base_name(model["model"])
+            existing_is_canonical = existing["model"] == _base_name(existing["model"])
+            if current_is_canonical and not existing_is_canonical:
+                seen[key] = model  # promote canonical over dated variant
+            elif not existing_is_canonical and model["model"] > existing["model"]:
+                seen[key] = model  # keep later dated variant
+    return list(seen.values())
 
 
 def add_estimated_cost(models: list[dict], input_tokens: int, output_tokens: int) -> list[dict]:
@@ -215,6 +245,11 @@ def print_csv_output(models: list[dict]) -> None:
         ])
 
 
+def _base_name(model_name: str) -> str:
+    """Strip a date-based version suffix from a model name."""
+    return _DATE_SUFFIX.sub("", model_name)
+
+
 def _strip_prefix(model_key: str) -> str:
     for prefix in STRIP_PREFIXES:
         if model_key.startswith(prefix):
@@ -275,6 +310,7 @@ examples:
   scrounge-tokens --json                                 JSON output
   scrounge-tokens --csv                                  CSV output
   scrounge-tokens --cached                               use cached data (offline)
+  scrounge-tokens --all-versions                         show all dated variants
         """,
     )
     parser.add_argument(
@@ -315,6 +351,11 @@ examples:
         action="store_true",
         help="Use cached pricing data instead of fetching",
     )
+    parser.add_argument(
+        "--all-versions",
+        action="store_true",
+        help="Show all dated model versions (default: collapse to one per family)",
+    )
     args = parser.parse_args()
 
     cache = load_cache()
@@ -343,6 +384,10 @@ examples:
     if not args.cached and cache:
         models = apply_price_changes(models, cache["models"])
         show_changes = any(m.get("input_change") or m.get("output_change") for m in models)
+
+    # Deduplication (collapse dated version variants by default)
+    if not args.all_versions:
+        models = deduplicate_models(models)
 
     # Filters and sort
     min_context = _parse_token_count(args.min_context) if args.min_context else None

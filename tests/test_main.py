@@ -3,6 +3,7 @@
 import pytest
 
 from scrounge_tokens.main import (
+    _base_name,
     _format_context,
     _format_cost,
     _parse_token_count,
@@ -10,6 +11,7 @@ from scrounge_tokens.main import (
     _strip_prefix,
     add_estimated_cost,
     apply_price_changes,
+    deduplicate_models,
     filter_models,
     parse_models,
     print_table,
@@ -138,7 +140,7 @@ SAMPLE_DATA = {
         "supports_function_calling": True,
     },
     "gemini/gemini-1.5-pro": {
-        "litellm_provider": "google",
+        "litellm_provider": "gemini",
         "mode": "chat",
         "input_cost_per_token": 0.00000125,
         "output_cost_per_token": 0.000005,
@@ -392,3 +394,93 @@ def test_print_table_shows_est_cost_column(capsys):
     print_table(models, show_est_cost=True)
     captured = capsys.readouterr()
     assert "Est. Cost" in captured.out
+
+
+# --- _base_name ---
+
+
+def test_base_name_strips_yyyymmdd():
+    assert _base_name("claude-3-5-sonnet-20241022") == "claude-3-5-sonnet"
+
+
+def test_base_name_strips_iso_date():
+    assert _base_name("gpt-4o-2024-08-06") == "gpt-4o"
+
+
+def test_base_name_no_change_for_canonical():
+    assert _base_name("gpt-4o") == "gpt-4o"
+
+
+def test_base_name_no_change_for_short_suffix():
+    # 4-digit suffixes like -0125 are NOT treated as dates
+    assert _base_name("gpt-3.5-turbo-0125") == "gpt-3.5-turbo-0125"
+
+
+# --- deduplicate_models ---
+
+VERSIONED_DATA = {
+    # canonical + two dated variants
+    "gpt-4o": {
+        "litellm_provider": "openai", "mode": "chat",
+        "input_cost_per_token": 0.0000025, "output_cost_per_token": 0.00001,
+        "max_input_tokens": 128_000,
+    },
+    "gpt-4o-2024-08-06": {
+        "litellm_provider": "openai", "mode": "chat",
+        "input_cost_per_token": 0.0000025, "output_cost_per_token": 0.00001,
+        "max_input_tokens": 128_000,
+    },
+    "gpt-4o-2024-11-20": {
+        "litellm_provider": "openai", "mode": "chat",
+        "input_cost_per_token": 0.0000025, "output_cost_per_token": 0.00001,
+        "max_input_tokens": 128_000,
+    },
+    # only dated variants, no canonical
+    "claude-3-5-sonnet-20240620": {
+        "litellm_provider": "anthropic", "mode": "chat",
+        "input_cost_per_token": 0.000003, "output_cost_per_token": 0.000015,
+        "max_input_tokens": 200_000,
+    },
+    "claude-3-5-sonnet-20241022": {
+        "litellm_provider": "anthropic", "mode": "chat",
+        "input_cost_per_token": 0.000003, "output_cost_per_token": 0.000015,
+        "max_input_tokens": 200_000,
+    },
+    # distinct model, no versioning
+    "gpt-4-turbo": {
+        "litellm_provider": "openai", "mode": "chat",
+        "input_cost_per_token": 0.00001, "output_cost_per_token": 0.00003,
+        "max_input_tokens": 128_000,
+    },
+}
+
+
+def test_deduplicate_prefers_canonical():
+    models = parse_models(VERSIONED_DATA)
+    deduped = deduplicate_models(models)
+    openai_models = [m["model"] for m in deduped if m["provider"] == "OpenAI" and "4o" in m["model"]]
+    assert openai_models == ["gpt-4o"]
+
+
+def test_deduplicate_keeps_latest_when_no_canonical():
+    models = parse_models(VERSIONED_DATA)
+    deduped = deduplicate_models(models)
+    sonnet_models = [m["model"] for m in deduped if "sonnet" in m["model"]]
+    assert sonnet_models == ["claude-3-5-sonnet-20241022"]
+
+
+def test_deduplicate_keeps_undated_model_unchanged():
+    models = parse_models(VERSIONED_DATA)
+    deduped = deduplicate_models(models)
+    assert any(m["model"] == "gpt-4-turbo" for m in deduped)
+
+
+def test_deduplicate_reduces_count():
+    models = parse_models(VERSIONED_DATA)
+    assert len(deduplicate_models(models)) < len(models)
+
+
+def test_deduplicate_all_versions_passthrough():
+    # Without deduplication the full set is returned
+    models = parse_models(VERSIONED_DATA)
+    assert len(models) == 6
