@@ -42,7 +42,8 @@ CHAT_MODES = {"chat", "completion", None}
 CACHE_PATH = Path.home() / ".cache" / "scrounge-tokens" / "prices.json"
 
 # Specialized model categories — hidden by default
-_SPECIALIZED_TERMS = ("audio", "realtime", "search", "robotics", "computer-use", "tts", "customtools")
+# "gemma" covers Google's open-weight Gemma models served via the Gemini API
+_SPECIALIZED_TERMS = ("audio", "realtime", "search", "robotics", "computer-use", "tts", "customtools", "gemma")
 
 # Deprecated model families — hidden by default
 _DEPRECATED_PREFIXES = ("gpt-3.5", "gemini-exp")
@@ -143,6 +144,24 @@ def sort_models(models: list[dict], sort_by: str = "provider") -> list[dict]:
         "provider": lambda m: (m["provider"], m["model"]),
     }
     return sorted(models, key=sort_keys.get(sort_by, sort_keys["provider"]))
+
+
+def filter_preview_duplicates(models: list[dict]) -> list[dict]:
+    """Drop preview models when a production counterpart exists from the same provider.
+
+    e.g. gemini-2.5-flash-preview-* is dropped when gemini-2.5-flash is present,
+    but gemini-3-flash-preview is kept because gemini-3-flash doesn't exist yet.
+    """
+    available = {(m["provider"], m["model"]) for m in models}
+    result = []
+    for model in models:
+        if "preview" in model["model"]:
+            base = _base_name(model["model"])
+            production = re.sub(r"-preview.*$", "", base)
+            if (model["provider"], production) in available:
+                continue  # production version present — skip this preview
+        result.append(model)
+    return result
 
 
 def deduplicate_models(models: list[dict]) -> list[dict]:
@@ -437,6 +456,11 @@ examples:
         action="store_true",
         help="Include -latest pointers, -chat endpoints, and cross-named duplicates — hidden by default",
     )
+    parser.add_argument(
+        "--show-previews",
+        action="store_true",
+        help="Include preview models when a production version already exists — hidden by default",
+    )
     args = parser.parse_args()
 
     cache = load_cache()
@@ -479,6 +503,8 @@ examples:
         models = [m for m in models if not _is_deprecated(m["model"])]
     if not args.show_aliases:
         models = [m for m in models if not _is_alias(m["model"])]
+    if not args.show_previews:
+        models = filter_preview_duplicates(models)
 
     # Filters and sort
     min_context = _parse_token_count(args.min_context) if args.min_context else None

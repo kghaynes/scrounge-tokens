@@ -17,6 +17,7 @@ from scrounge_tokens.main import (
     apply_price_changes,
     deduplicate_models,
     filter_models,
+    filter_preview_duplicates,
     parse_models,
     print_table,
     sort_models,
@@ -582,6 +583,37 @@ def test_is_alias_real_model_not_flagged():
 def test_is_deprecated_gemini_exp():
     assert _is_deprecated("gemini-exp-1206") is True
     assert _is_deprecated("gemini-exp-1114") is True
+
+
+def test_is_specialized_gemma():
+    assert _is_specialized("gemini-gemma-2-27b-it") is True
+
+
+# --- filter_preview_duplicates ---
+
+_PREVIEW_MODELS = [
+    {"provider": "Google", "model": "gemini-2.5-flash",                    "input_per_1m": 0.30, "output_per_1m": 2.50, "context_tokens": 1_000_000, "context": "1M", "vision": "Y", "tools": "Y"},
+    {"provider": "Google", "model": "gemini-2.5-flash-preview-09-2025",    "input_per_1m": 0.30, "output_per_1m": 2.50, "context_tokens": 1_000_000, "context": "1M", "vision": "Y", "tools": "Y"},
+    {"provider": "Google", "model": "gemini-3-flash-preview",              "input_per_1m": 0.50, "output_per_1m": 3.00, "context_tokens": 1_000_000, "context": "1M", "vision": "Y", "tools": "Y"},
+]
+
+
+def test_filter_preview_drops_when_production_exists():
+    result = filter_preview_duplicates(_PREVIEW_MODELS)
+    names = [m["model"] for m in result]
+    assert "gemini-2.5-flash-preview-09-2025" not in names
+    assert "gemini-2.5-flash" in names
+
+
+def test_filter_preview_keeps_when_no_production():
+    result = filter_preview_duplicates(_PREVIEW_MODELS)
+    names = [m["model"] for m in result]
+    assert "gemini-3-flash-preview" in names
+
+
+def test_filter_preview_correct_count():
+    result = filter_preview_duplicates(_PREVIEW_MODELS)
+    assert len(result) == 2
 
 
 # --- _is_deprecated ---
