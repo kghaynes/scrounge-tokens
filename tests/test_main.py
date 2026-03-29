@@ -411,6 +411,18 @@ def test_base_name_no_change_for_canonical():
     assert _base_name("gpt-4o") == "gpt-4o"
 
 
+def test_base_name_strips_mm_yyyy():
+    assert _base_name("gemini-2.5-flash-preview-09-2025") == "gemini-2.5-flash-preview"
+
+
+def test_base_name_strips_mm_dd():
+    assert _base_name("gemini-2.5-flash-lite-preview-06-17") == "gemini-2.5-flash-lite-preview"
+
+
+def test_base_name_strips_three_digit_version():
+    assert _base_name("gemini-2.0-flash-001") == "gemini-2.0-flash"
+
+
 def test_base_name_no_change_for_short_suffix():
     # 4-digit suffixes like -0125 are NOT treated as dates
     assert _base_name("gpt-3.5-turbo-0125") == "gpt-3.5-turbo-0125"

@@ -28,8 +28,13 @@ PROVIDERS = {
 # Prefixes to strip from model keys for cleaner display
 STRIP_PREFIXES = ("gemini/", "nvidia_nim/")
 
-# Matches date-based version suffixes: -20241022 or -2024-08-06
-_DATE_SUFFIX = re.compile(r"-(\d{8}|\d{4}-\d{2}-\d{2})$")
+# Matches date/version suffixes to collapse model variants:
+#   -20241022          YYYYMMDD  (Anthropic, OpenAI)
+#   -2024-08-06        YYYY-MM-DD (OpenAI)
+#   -09-2025           MM-YYYY   (Google preview dates)
+#   -06-17             MM-DD     (Google preview dates)
+#   -001               NNN       (Google point versions)
+_DATE_SUFFIX = re.compile(r"-(\d{8}|\d{4}-\d{2}-\d{2}|\d{2}-\d{4}|\d{2}-\d{2}|\d{3})$")
 
 # Only include models with these modes (or no mode specified)
 CHAT_MODES = {"chat", "completion", None}
