@@ -16,13 +16,24 @@ Fetches current AI model pricing (input/output token costs and context window si
 ```bash
 git clone https://github.com/kghaynes/scrounge-tokens.git
 cd scrounge-tokens
+python3 -m venv .venv
+source .venv/bin/activate
 pip install -e .
+```
+
+> **Note**: On Debian/Ubuntu, `pip install` outside a virtual environment is blocked by default. The `venv` step above is the recommended fix.
+
+### Each new terminal session
+
+```bash
+source .venv/bin/activate
 ```
 
 ### Get updates later
 
 ```bash
 git pull origin main
+pip install -e .   # re-run if dependencies changed
 ```
 
 ## Usage
@@ -88,6 +99,7 @@ Pricing data is sourced from the [litellm community pricing database](https://gi
 ## Development
 
 ```bash
+python3 -m venv .venv && source .venv/bin/activate
 pip install -e ".[dev]"
 
 # Format
